@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f9f6ec" />
+    <meta name="description" content="فتح الرحمن التفاعلي: استمع إلى الدروس، اقرأ صفحات الكتاب، وتدرّب على الحروف والكلمات." />
+    <title>فتح الرحمن التفاعلي | تعلّم الحروف والقراءة</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar" aria-label="قائمة دروس فتح الرحمن">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 54 54" fill="none"><path d="M27 14c-7-4-15-4-22 0v26c7-4 15-4 22 0 7-4 15-4 22 0V14c-7-4-15-4-22 0Z" stroke="currentColor" stroke-width="3.4" stroke-linejoin="round"/><path d="M27 14v26M11 21c4-1 8-1 11 1M32 22c3-2 7-2 11-1" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>
+          </span>
+          <span><strong>فَتْحُ الرَّحْمَنِ</strong><small>التعلّم التفاعلي</small></span>
+        </div>
+
+        <div class="nav-label">المحتوى التعليمي</div>
+        <nav class="lesson-nav" id="lesson-nav" aria-label="صفحات الكتاب"></nav>
+
+        <div class="sidebar-bottom">
+          <div class="progress-heading"><span>إنجازك في هذه النسخة</span><strong id="progress-count">٠ / ٤</strong></div>
+          <div class="progress-track"><span id="progress-bar"></span></div>
+          <p>يُحفظ التقدّم على هذا الجهاز فقط.</p>
+        </div>
+      </aside>
+
+      <main class="main-content" id="main-content">
+        <header class="topbar">
+          <button class="mobile-menu icon-button" id="menu-button" aria-label="فتح قائمة الدروس" aria-expanded="false" aria-controls="sidebar">☰</button>
+          <div class="breadcrumb"><span>المكتبة التعليمية</span><span class="crumb-separator">/</span><strong>فتح الرحمن</strong></div>
+          <span class="status-pill"><span class="status-dot"></span> نسخة تعليمية تجريبية</span>
+        </header>
+
+        <section class="hero" aria-labelledby="hero-title">
+          <div class="hero-content">
+            <div class="eyebrow">اقرأ · استمع · تدرّب</div>
+            <h1 id="hero-title">رحلتك مع <span>الحروف العربية</span></h1>
+            <p>تعلّم خطوة بخطوة من صفحات كتاب فتح الرحمن، ثم اختبر نفسك بأنشطة قصيرة وممتعة.</p>
+          </div>
+          <div class="hero-illustration" aria-hidden="true"><span>أَ</span><span>بَ</span><span>تَ</span><i>✦</i></div>
+        </section>
+
+        <section class="lesson-heading" aria-labelledby="lesson-title">
+          <div>
+            <div class="section-overline" id="lesson-chapter">الوحدة الأولى</div>
+            <h2 id="lesson-title">الحروف الهجائية</h2>
+            <p id="lesson-subtitle">تعرّف على أشكال الحروف وأسمائها.</p>
+          </div>
+          <div class="lesson-counter" id="lesson-counter">الدرس ١ من ٤</div>
+        </section>
+
+        <div class="mode-switch" role="tablist" aria-label="طريقة عرض الدرس">
+          <button role="tab" id="tab-book" class="mode active" aria-selected="true" aria-controls="panel-book" data-mode="book">📖 <span>صفحة الكتاب</span></button>
+          <button role="tab" id="tab-practice" class="mode" aria-selected="false" aria-controls="panel-practice" data-mode="practice">✏️ <span>تدرّب بنفسك</span></button>
+        </div>
+
+        <section id="panel-book" role="tabpanel" aria-labelledby="tab-book" class="book-layout">
+          <div class="reader-card">
+            <div class="reader-toolbar"><span class="reader-tag">الكتاب الأصلي</span><button class="subtle-button" id="zoom-button" aria-label="تكبير صورة الصفحة">⤢ <span>تكبير الصفحة</span></button></div>
+            <div class="page-frame"><img id="page-image" alt="" decoding="async" /></div>
+            <div class="reader-footer"><button id="prev-button" class="nav-button">→ <span>السابق</span></button><span id="page-label">صفحة ٥</span><button id="next-button" class="nav-button"><span>التالي</span> ←</button></div>
+          </div>
+
+          <div class="lesson-tools">
+            <div class="audio-card">
+              <span class="tool-icon" aria-hidden="true">♫</span>
+              <h3>استمع إلى القراءة</h3>
+              <p>شغّل تسجيل هذه الصفحة، وتابع الكلمات والحروف بعينيك أثناء الاستماع.</p>
+              <audio id="page-audio" controls preload="metadata" aria-label="التسجيل الصوتي للصفحة"></audio>
+              <div class="audio-footer"><label for="audio-speed">سرعة التشغيل</label><select id="audio-speed" aria-label="سرعة التسجيل"><option value="0.8">بطيئة ٠٫٨×</option><option value="1" selected>عادية ١×</option><option value="1.2">سريعة ١٫٢×</option></select></div>
+              <button class="mark-button" id="mark-complete">✓ <span>أنهيت الاستماع والمراجعة</span></button>
+            </div>
+            <div class="activity-card"><span class="activity-symbol">✦</span><div><h3>هل أنت جاهز للتدريب؟</h3><p>اختبر فهمك بسؤال قصير بعد كل صفحة.</p><button id="start-practice" class="secondary-action">ابدأ التدريب ←</button></div></div>
+            <div class="tip-card"><strong>نصيحة تعليمية</strong><p>استمع أولًا، ثم ردّد الحروف أو الكلمات بصوت واضح، وبعدها جرّب النشاط.</p></div>
+          </div>
+        </section>
+
+        <section id="panel-practice" role="tabpanel" aria-labelledby="tab-practice" class="practice-layout" hidden>
+          <div class="practice-card">
+            <div class="practice-meta"><span id="question-progress">السؤال ١ من ٣</span><span id="score-pill">النقاط: ٠</span></div>
+            <div class="question-progress-track"><span id="question-progress-bar"></span></div>
+            <h3 id="question-title">اختر الإجابة الصحيحة</h3>
+            <p id="question-hint">اضغط على الإجابة التي تراها صحيحة.</p>
+            <div class="quiz-options" id="quiz-options" role="group" aria-label="اختيارات السؤال"></div>
+            <div class="feedback" id="feedback" role="status" aria-live="polite" hidden></div>
+            <div class="practice-actions"><button id="retry-button" class="subtle-button">↺ أعد التدريب</button><button id="next-question" class="primary-action" hidden>السؤال التالي ←</button></div>
+          </div>
+          <aside class="practice-side"><div class="practice-side-emoji">🌟</div><h3>خطوة صغيرة كل يوم</h3><p>يمكنك إعادة التمرين أكثر من مرة. المحاولة تساعدك على التعلّم.</p><button class="subtle-button" id="back-to-book">العودة إلى صفحة الكتاب</button></aside>
+        </section>
+
+        <footer class="footer">فتح الرحمن التفاعلي <span>·</span> نسخة أولية مبنية على الصفحات المرسلة</footer>
+      </main>
+    </div>
+
+    <dialog id="zoom-dialog" aria-label="عرض صفحة الكتاب بحجم أكبر"><div class="zoom-header"><strong id="zoom-title">صفحة الكتاب</strong><button id="close-zoom" aria-label="إغلاق تكبير الصفحة">✕</button></div><img id="zoom-image" alt="" /></dialog>
+    <div class="mobile-backdrop" id="mobile-backdrop" hidden></div>
+  </body>
+</html>
