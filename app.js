@@ -1,7 +1,7 @@
 "use strict";
 
-// Page-to-audio pairing follows the order in which the assets were uploaded.
-// The recordings have not yet been content-transcribed and manually verified.
+// Page-to-audio pairing follows the original upload order, as confirmed by
+// the content owner on 2026-10-25. Individual words have not been time-aligned.
 const lessons = [
   {
     id: "letters", number: "١", title: "الحروف الهجائية", subtitle: "تعرّف على أشكال الحروف وأسمائها.", chapter: "التعرّف على الحروف", page: "٥", image: "assets/pages/01-letters.webp", audio: "assets/audio/01-letters.m4a",
