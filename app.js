@@ -48,6 +48,9 @@ let mode = "book";
 let questionIndex = 0;
 let selected = null;
 let score = 0;
+const matchingPairs = [{ letter: "أ", name: "ألف" }, { letter: "ء", name: "همزة" }, { letter: "ب", name: "باء" }];
+let matchingDone = new Set();
+let matchingSelection = null;
 const audio = $("page-audio");
 
 function persistProgress() {
@@ -91,6 +94,7 @@ function goToLesson(index) {
   questionIndex = 0; score = 0; selected = null;
   renderNavigation();
   renderQuestion();
+  renderMatching();
   renderCompleteButton();
   if (location.hash !== `#${lesson.id}`) history.replaceState(null, "", `#${lesson.id}`);
 }
@@ -186,6 +190,54 @@ function nextQuestion() {
 }
 
 function resetQuiz() { questionIndex = 0; score = 0; selected = null; renderQuestion(); }
+function renderMatching() {
+  const card = $("matching-card");
+  card.hidden = currentIndex !== 0;
+  matchingDone = new Set();
+  matchingSelection = null;
+  if (card.hidden) return;
+  $("matching-feedback").textContent = "ابدأ باختيار حرف.";
+  const letters = $("matching-letters");
+  const names = $("matching-names");
+  letters.replaceChildren(); names.replaceChildren();
+  const createTile = (value, type) => {
+    const tile = document.createElement("button");
+    tile.className = "matching-tile";
+    tile.type = "button";
+    tile.textContent = value;
+    tile.addEventListener("click", () => matchChoice(type, value, tile));
+    return tile;
+  };
+  for (const pair of matchingPairs) letters.append(createTile(pair.letter, "letter"));
+  for (const pair of [matchingPairs[2], matchingPairs[0], matchingPairs[1]]) names.append(createTile(pair.name, "name"));
+}
+
+function matchChoice(type, value, tile) {
+  if (tile.disabled) return;
+  if (!matchingSelection) {
+    if (type !== "letter") { $("matching-feedback").textContent = "اختر حرفًا أولًا من العمود الأيمن."; return; }
+    matchingSelection = { value, tile };
+    tile.classList.add("selected");
+    $("matching-feedback").textContent = "اختر الآن اسم هذا الحرف.";
+    return;
+  }
+  if (type === "letter") {
+    matchingSelection.tile.classList.remove("selected");
+    matchingSelection = { value, tile };
+    tile.classList.add("selected");
+    return;
+  }
+  const expectedName = matchingPairs.find(pair => pair.letter === matchingSelection.value)?.name;
+  if (expectedName === value) {
+    matchingDone.add(matchingSelection.value);
+    for (const matchedTile of [matchingSelection.tile, tile]) { matchedTile.classList.remove("selected"); matchedTile.classList.add("matched"); matchedTile.disabled = true; }
+    $("matching-feedback").textContent = matchingDone.size === matchingPairs.length ? "🌟 ممتاز! وصلت كل حرف باسمه الصحيح." : "✓ إجابة صحيحة! أكمل التوصيل.";
+  } else {
+    matchingSelection.tile.classList.remove("selected");
+    $("matching-feedback").textContent = "حاول مرة أخرى. هذا الاسم لا يطابق الحرف.";
+  }
+  matchingSelection = null;
+}
 function closeMobileMenu() { $("sidebar").classList.remove("open"); $("mobile-backdrop").hidden = true; $("menu-button").setAttribute("aria-expanded", "false"); }
 
 function initialize() {
@@ -202,6 +254,7 @@ function initialize() {
   $("back-to-book").addEventListener("click", () => setMode("book"));
   $("next-question").addEventListener("click", nextQuestion);
   $("retry-button").addEventListener("click", resetQuiz);
+  $("reset-matching").addEventListener("click", renderMatching);
   $("zoom-button").addEventListener("click", () => $("zoom-dialog").showModal());
   $("page-image").addEventListener("click", () => $("zoom-dialog").showModal());
   $("close-zoom").addEventListener("click", () => $("zoom-dialog").close());

@@ -94,6 +94,11 @@
             <div class="practice-actions"><button id="retry-button" class="subtle-button">↺ أعد التدريب</button><button id="next-question" class="primary-action" hidden>السؤال التالي ←</button></div>
           </div>
           <aside class="practice-side"><div class="practice-side-emoji">🌟</div><h3>خطوة صغيرة كل يوم</h3><p>يمكنك إعادة التمرين أكثر من مرة. المحاولة تساعدك على التعلّم.</p><button class="subtle-button" id="back-to-book">العودة إلى صفحة الكتاب</button></aside>
+          <div class="matching-card" id="matching-card" hidden>
+            <div class="matching-heading"><div><div class="section-overline">نشاط تفاعلي</div><h3>صِل الحرف باسمه</h3><p>اختر حرفًا أولًا، ثم اختر اسمه الصحيح.</p></div><button id="reset-matching" class="subtle-button">↺ إعادة التوصيل</button></div>
+            <div class="matching-columns"><div id="matching-letters" class="matching-column" aria-label="الحروف"></div><div id="matching-names" class="matching-column" aria-label="أسماء الحروف"></div></div>
+            <div id="matching-feedback" class="matching-feedback" aria-live="polite">ابدأ باختيار حرف.</div>
+          </div>
         </section>
 
         <footer class="footer">فتح الرحمن التفاعلي <span>·</span> نسخة أولية مبنية على الصفحات المرسلة</footer>
