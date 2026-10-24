@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
+    <script src="audio-segments.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -64,8 +65,9 @@
 
         <section id="panel-book" role="tabpanel" aria-labelledby="tab-book" class="book-layout">
           <div class="reader-card">
-            <div class="reader-toolbar"><span class="reader-tag">الكتاب الأصلي</span><button class="subtle-button" id="zoom-button" aria-label="تكبير صورة الصفحة">⤢ <span>تكبير الصفحة</span></button></div>
-            <div class="page-frame"><img id="page-image" alt="" decoding="async" /></div>
+            <div class="reader-toolbar"><span class="reader-tag">🔉 اضغط على الحرف أو الكلمة للاستماع</span><button class="subtle-button" id="zoom-button" aria-label="تكبير صورة الصفحة">⤢ <span>تكبير الصفحة</span></button></div>
+            <div class="page-frame"><div class="page-interactive" id="page-interactive"><img id="page-image" alt="" decoding="async" /><div class="audio-hotspots" id="page-hotspots" aria-label="تشغيل نطق عناصر الصفحة"></div></div></div>
+            <p class="segment-disclaimer" id="segment-disclaimer">المقاطع الفردية محددة مبدئيًا حسب فواصل الصمت، وتحتاج مراجعة صوتية قبل اعتمادها نهائيًا.</p>
             <div class="reader-footer"><button id="prev-button" class="nav-button">→ <span>السابق</span></button><span id="page-label">صفحة ٥</span><button id="next-button" class="nav-button"><span>التالي</span> ←</button></div>
           </div>
 
@@ -73,7 +75,7 @@
             <div class="audio-card">
               <span class="tool-icon" aria-hidden="true">♫</span>
               <h3>استمع إلى القراءة</h3>
-              <p>شغّل تسجيل هذه الصفحة، وتابع الكلمات والحروف بعينيك أثناء الاستماع.</p>
+              <p>شغّل الصفحة كاملة، أو اضغط على عنصر في الصورة للاستماع إلى مقطعه وحده.</p>
               <audio id="page-audio" controls preload="metadata" aria-label="التسجيل الصوتي للصفحة"></audio>
               <div class="audio-footer"><label for="audio-speed">سرعة التشغيل</label><select id="audio-speed" aria-label="سرعة التسجيل"><option value="0.8">بطيئة ٠٫٨×</option><option value="1" selected>عادية ١×</option><option value="1.2">سريعة ١٫٢×</option></select></div>
               <button class="mark-button" id="mark-complete">✓ <span>أنهيت الاستماع والمراجعة</span></button>
@@ -105,7 +107,7 @@
       </main>
     </div>
 
-    <dialog id="zoom-dialog" aria-label="عرض صفحة الكتاب بحجم أكبر"><div class="zoom-header"><strong id="zoom-title">صفحة الكتاب</strong><button id="close-zoom" aria-label="إغلاق تكبير الصفحة">✕</button></div><img id="zoom-image" alt="" /></dialog>
+    <dialog id="zoom-dialog" aria-label="عرض صفحة الكتاب بحجم أكبر"><div class="zoom-header"><strong id="zoom-title">صفحة الكتاب</strong><button id="close-zoom" aria-label="إغلاق تكبير الصفحة">✕</button></div><div class="zoom-page"><img id="zoom-image" alt="" /><div class="audio-hotspots" id="zoom-hotspots" aria-label="تشغيل نطق عناصر الصفحة المكبّرة"></div></div></dialog>
     <div class="mobile-backdrop" id="mobile-backdrop" hidden></div>
   </body>
 </html>
