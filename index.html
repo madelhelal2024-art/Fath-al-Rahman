@@ -13,7 +13,7 @@
     <script src="audio-segments.js" defer></script>
     <script src="app.js" defer></script>
   </head>
-  <body>
+  <body class="slide-mode">
     <div class="app-shell">
       <aside class="sidebar" id="sidebar" aria-label="قائمة دروس فتح الرحمن">
         <div class="brand">
@@ -59,11 +59,44 @@
         </section>
 
         <div class="mode-switch" role="tablist" aria-label="طريقة عرض الدرس">
-          <button role="tab" id="tab-book" class="mode active" aria-selected="true" aria-controls="panel-book" data-mode="book">📖 <span>صفحة الكتاب</span></button>
-          <button role="tab" id="tab-practice" class="mode" aria-selected="false" aria-controls="panel-practice" data-mode="practice">✏️ <span>تدرّب بنفسك</span></button>
+          <button role="tab" id="tab-slide" class="mode active" aria-selected="true" aria-controls="panel-slide" data-mode="slide">▶ <span>عرض الشرائح</span></button>
+          <button role="tab" id="tab-book" class="mode" aria-selected="false" aria-controls="panel-book" data-mode="book">📖 <span>صفحة الكتاب</span></button>
+          <button role="tab" id="tab-practice" class="mode" aria-selected="false" aria-controls="panel-practice" data-mode="practice">✏️ <span>التدريبات</span></button>
         </div>
 
-        <section id="panel-book" role="tabpanel" aria-labelledby="tab-book" class="book-layout">
+        <section id="panel-slide" role="tabpanel" aria-labelledby="tab-slide" class="slide-layout">
+          <div class="slide-deck" id="slide-deck">
+            <div class="slide-topbar">
+              <span class="slide-lesson-label" id="slide-lesson-label">الدرس الأول</span>
+              <span id="slide-position" class="slide-position">الشريحة ١ من ٣٠</span>
+              <button id="slide-fullscreen" class="slide-fullscreen" type="button">⛶ <span>ملء الشاشة</span></button>
+            </div>
+            <div class="slide-canvas" id="slide-canvas">
+              <div class="slide-orbit slide-orbit-one" aria-hidden="true"></div>
+              <div class="slide-orbit slide-orbit-two" aria-hidden="true"></div>
+              <span class="slide-sparkle sparkle-one" aria-hidden="true">✦</span>
+              <span class="slide-sparkle sparkle-two" aria-hidden="true">✦</span>
+              <div class="slide-item" id="slide-item" aria-live="polite"></div>
+              <div class="slide-item-caption" id="slide-item-caption"></div>
+            </div>
+            <div class="slide-controls">
+              <button id="slide-prev" class="slide-nav-button" type="button">→ <span>السابق</span></button>
+              <div class="slide-sound">
+                <button id="slide-play" class="slide-play-button" type="button" aria-label="استمع إلى العنصر الحالي">🔊</button>
+                <span id="slide-sound-label">استمع إلى الحرف</span>
+              </div>
+              <button id="slide-next" class="slide-nav-button primary" type="button"><span>التالي</span> ←</button>
+            </div>
+            <div class="slide-track"><span id="slide-track-fill"></span></div>
+          </div>
+          <div class="slide-underbar">
+            <p>عنصر واحد في كل شريحة. استخدم «التالي» أو الأسهم للتنقل، واضغط على رمز الصوت للاستماع.</p>
+            <div class="slide-secondary-actions"><button id="show-book-from-slide" class="subtle-button" type="button">عرض الصفحة الأصلية</button><button id="practice-from-slide" class="subtle-button" type="button">التدريبات</button></div>
+          </div>
+          <p class="segment-disclaimer">التوقيتات الصوتية أولية وتحتاج مراجعة سمعية قبل اعتمادها للطلاب؛ ومنها تقسيم أصوات العبارات الأخيرة إلى كلمات منفردة.</p>
+        </section>
+
+        <section id="panel-book" role="tabpanel" aria-labelledby="tab-book" class="book-layout" hidden>
           <div class="reader-card">
             <div class="reader-toolbar"><span class="reader-tag">🔉 اضغط على الحرف أو الكلمة للاستماع</span><button class="subtle-button" id="zoom-button" aria-label="تكبير صورة الصفحة">⤢ <span>تكبير الصفحة</span></button></div>
             <div class="page-frame"><div class="page-interactive" id="page-interactive"><img id="page-image" alt="" decoding="async" /><div class="audio-hotspots" id="page-hotspots" aria-label="تشغيل نطق عناصر الصفحة"></div></div></div>
@@ -95,7 +128,7 @@
             <div class="feedback" id="feedback" role="status" aria-live="polite" hidden></div>
             <div class="practice-actions"><button id="retry-button" class="subtle-button">↺ أعد التدريب</button><button id="next-question" class="primary-action" hidden>السؤال التالي ←</button></div>
           </div>
-          <aside class="practice-side"><div class="practice-side-emoji">🌟</div><h3>خطوة صغيرة كل يوم</h3><p>يمكنك إعادة التمرين أكثر من مرة. المحاولة تساعدك على التعلّم.</p><button class="subtle-button" id="back-to-book">العودة إلى صفحة الكتاب</button></aside>
+          <aside class="practice-side"><div class="practice-side-emoji">🌟</div><h3>خطوة صغيرة كل يوم</h3><p>يمكنك إعادة التمرين أكثر من مرة. المحاولة تساعدك على التعلّم.</p><button class="subtle-button" id="back-to-book">العودة إلى الشرائح</button></aside>
           <div class="matching-card" id="matching-card" hidden>
             <div class="matching-heading"><div><div class="section-overline">نشاط تفاعلي</div><h3>صِل الحرف باسمه</h3><p>اختر حرفًا أولًا، ثم اختر اسمه الصحيح.</p></div><button id="reset-matching" class="subtle-button">↺ إعادة التوصيل</button></div>
             <div class="matching-columns"><div id="matching-letters" class="matching-column" aria-label="الحروف"></div><div id="matching-names" class="matching-column" aria-label="أسماء الحروف"></div></div>

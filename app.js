@@ -44,7 +44,8 @@ let completed = new Set();
 try { completed = new Set(JSON.parse(localStorage.getItem(completedKey) || "[]")); } catch { /* Local storage may be unavailable. */ }
 
 let currentIndex = 0;
-let mode = "book";
+let mode = "slide";
+let slideIndex = 0;
 let questionIndex = 0;
 let selected = null;
 let score = 0;
@@ -57,6 +58,14 @@ let activeClipEnd = 0;
 
 const letterNames = ["ا","ء","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","ه","و","ي","ى"];
 const fathaLetters = ["أَ","بَ","تَ","ثَ","جَ","حَ","خَ","دَ","ذَ","رَ","زَ","سَ","شَ","صَ","ضَ","طَ","ظَ","عَ","غَ","فَ","قَ","كَ","لَ","مَ","نَ","هَ","وَ","يَ"];
+// The last four book cards contain two words each. Unlike the book reader,
+// presentation mode gives every printed word its own slide.
+const lastPagePhrases = [
+  ["أَحَدَ", "عَشَرَ"],
+  ["عَبَسَ", "وَبَسَرَ"],
+  ["صَبَرَ", "وَغَفَرَ"],
+  ["جَعَلَ", "لَكَ"]
+];
 
 function gridHotspots(columnsX, rowsY, labels, width, height) {
   return rowsY.flatMap((y, row) => columnsX.map((x, col) => {
@@ -72,6 +81,20 @@ function getPageHotspots(pageId) {
   const regular = gridHotspots([81.4,60.9,40.5,21.1], [23.1,33,43.1,53.3,64], null, 18, 8.4);
   const wide = [76.2,86.2].flatMap((y, row) => [72.1,30.2].map((x, col) => ({ index:20 + row * 2 + col, x, y, width:41, height:8.8, label:`الكلمة ${arabicDigits(21 + row * 2 + col)}` })));
   return [...regular, ...wide];
+}
+
+function getSlideItems(pageId) {
+  return getPageHotspots(pageId).flatMap((spot) => {
+    const phrase = pageId === "words2" ? lastPagePhrases[spot.index - 20] : null;
+    if (!phrase) return [{ ...spot, segmentIndex: spot.index }];
+    return phrase.map((word, part) => ({
+      ...spot,
+      word,
+      segmentIndex: spot.index,
+      audioPart: part,
+      audioParts: phrase.length
+    }));
+  });
 }
 
 function resizePageImages() {
@@ -113,18 +136,21 @@ function clearClip() {
   activeClipIndex = null;
   activeClipEnd = 0;
   for (const button of document.querySelectorAll(".audio-hotspot.active")) button.classList.remove("active");
+  $("slide-play").classList.remove("active");
 }
 
-function playClip(index) {
+function playClip(index, portion = null) {
   const segment = window.PAGE_SEGMENTS[lessons[currentIndex].id]?.[index];
   if (!segment) return;
   if (activeClipIndex === index && !audio.paused) { audio.pause(); return; }
   audio.pause();
   clearClip();
   activeClipIndex = index;
-  activeClipEnd = segment[1];
-  audio.currentTime = segment[0];
+  const duration = segment[1] - segment[0];
+  activeClipEnd = portion ? segment[0] + duration * portion[1] : segment[1];
+  audio.currentTime = portion ? segment[0] + duration * portion[0] : segment[0];
   for (const button of document.querySelectorAll(`[data-clip-index="${index}"]`)) button.classList.add("active");
+  if (mode === "slide" && getSlideItems(lessons[currentIndex].id)[slideIndex]?.segmentIndex === index) $("slide-play").classList.add("active");
   const playing = audio.play();
   if (playing?.catch) playing.catch(() => clearClip());
 }
@@ -148,11 +174,91 @@ function renderNavigation() {
   $("progress-bar").style.width = `${100 * completed.size / lessons.length}%`;
 }
 
+// A presentation slide represents exactly one element from the current book page.
+// Words are cropped directly from the supplied page artwork so their spelling,
+// vowel marks, and pedagogical order remain faithful to the printed book.
+function renderSlide() {
+  const lesson = lessons[currentIndex];
+  const elements = getSlideItems(lesson.id);
+  const element = elements[slideIndex];
+  const slideRoot = $("slide-item");
+  slideRoot.replaceChildren();
+  slideRoot.style.animation = "none";
+  void slideRoot.offsetHeight;
+  slideRoot.style.animation = "";
+
+  if (lesson.id === "letters" || lesson.id === "fatha" || element.word) {
+    const glyph = document.createElement("span");
+    glyph.className = "slide-glyph" + (element.word ? " slide-phrase-glyph" : "");
+    glyph.lang = "ar";
+    glyph.textContent = element.word || (lesson.id === "letters" ? letterNames[slideIndex] : fathaLetters[slideIndex]);
+    slideRoot.append(glyph);
+    slideRoot.setAttribute("aria-label", `الشريحة ${arabicDigits(slideIndex + 1)}: ${glyph.textContent}`);
+  } else {
+    const cropPadding = 5;
+    const x = lesson.width * (element.x - element.width / 2) / 100;
+    const y = lesson.height * (element.y - element.height / 2) / 100;
+    const width = lesson.width * element.width / 100;
+    const height = lesson.height * element.height / 100;
+    const svgNs = "http://www.w3.org/2000/svg";
+    const container = document.createElement("div");
+    container.className = "slide-word-art" + (element.width > 30 ? " wide" : "");
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("viewBox", `${x - cropPadding} ${y - cropPadding} ${width + cropPadding * 2} ${height + cropPadding * 2}`);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `الكلمة ${arabicDigits(slideIndex + 1)} من صفحة ${lesson.page}`);
+    const image = document.createElementNS(svgNs, "image");
+    image.setAttribute("href", lesson.image);
+    image.setAttribute("width", lesson.width);
+    image.setAttribute("height", lesson.height);
+    svg.append(image);
+    container.append(svg);
+    slideRoot.append(container);
+    slideRoot.setAttribute("aria-label", `الشريحة ${arabicDigits(slideIndex + 1)}: الكلمة ${arabicDigits(slideIndex + 1)}`);
+  }
+
+  $("slide-item-caption").textContent = "";
+  $("slide-lesson-label").textContent = `${lesson.title} · الدرس ${lesson.number}`;
+  $("slide-position").textContent = `الشريحة ${arabicDigits(slideIndex + 1)} من ${arabicDigits(elements.length)}`;
+  $("slide-track-fill").style.width = `${(slideIndex + 1) / elements.length * 100}%`;
+  $("slide-prev").disabled = slideIndex === 0;
+  const isLastSlide = slideIndex === elements.length - 1;
+  $("slide-next").querySelector("span").textContent = isLastSlide
+    ? currentIndex === lessons.length - 1 ? "التدريبات" : "الدرس التالي"
+    : "التالي";
+  const hasAudio = Boolean(window.PAGE_SEGMENTS?.[lesson.id]?.[element.segmentIndex]);
+  $("slide-play").disabled = !hasAudio;
+  $("slide-play").setAttribute("aria-label", hasAudio ? "استمع إلى العنصر الحالي" : "لا يتوفر صوت منفصل لهذا العنصر حاليًا");
+  $("slide-sound-label").textContent = !hasAudio ? "الصوت قيد المراجعة" : lesson.id === "letters" || lesson.id === "fatha" ? "استمع إلى الحرف" : "استمع إلى الكلمة";
+}
+
+function nextSlide() {
+  audio.pause();
+  clearClip();
+  if (slideIndex + 1 < getSlideItems(lessons[currentIndex].id).length) {
+    slideIndex++;
+    renderSlide();
+  } else {
+    markComplete();
+    if (currentIndex + 1 < lessons.length) goToLesson(currentIndex + 1);
+    else setMode("practice");
+  }
+}
+
+function previousSlide() {
+  if (slideIndex === 0) return;
+  audio.pause();
+  clearClip();
+  slideIndex--;
+  renderSlide();
+}
+
 function goToLesson(index) {
   if (index < 0 || index >= lessons.length) return;
   audio.pause();
   clearClip();
   currentIndex = index;
+  slideIndex = 0;
   const lesson = lessons[index];
   $("lesson-chapter").textContent = lesson.chapter;
   $("lesson-title").textContent = lesson.title;
@@ -169,6 +275,7 @@ function goToLesson(index) {
   audio.playbackRate = Number($("audio-speed").value);
   resizePageImages();
   renderHotspots();
+  renderSlide();
   $("prev-button").disabled = index === 0;
   $("next-button").disabled = index === lessons.length - 1;
   questionIndex = 0; score = 0; selected = null;
@@ -176,6 +283,7 @@ function goToLesson(index) {
   renderQuestion();
   renderMatching();
   renderCompleteButton();
+  setMode("slide");
   if (location.hash !== `#${lesson.id}`) history.replaceState(null, "", `#${lesson.id}`);
 }
 
@@ -193,7 +301,8 @@ function markComplete() {
 
 function setMode(nextMode) {
   mode = nextMode;
-  for (const next of ["book", "practice"]) {
+  document.body.classList.toggle("slide-mode", mode === "slide");
+  for (const next of ["slide", "book", "practice"]) {
     const active = next === mode;
     $("tab-" + next).classList.toggle("active", active);
     $("tab-" + next).setAttribute("aria-selected", String(active));
@@ -215,7 +324,7 @@ function renderQuestion() {
   if (finished) {
     $("question-title").textContent = `أتممت التدريب! نتيجتك ${arabicDigits(score)} من ${arabicDigits(questions.length)}`;
     $("question-hint").textContent = "يمكنك إعادة التدريب أو الانتقال إلى الصفحة التالية.";
-    $("next-question").textContent = currentIndex < lessons.length - 1 ? "الدرس التالي ←" : "العودة إلى الكتاب";
+    $("next-question").textContent = currentIndex < lessons.length - 1 ? "الدرس التالي ←" : "العودة إلى الشرائح";
     $("next-question").hidden = false;
     if (score === questions.length) markComplete();
     return;
@@ -262,7 +371,7 @@ function chooseAnswer(answer, clickedButton) {
 function nextQuestion() {
   if (questionIndex >= lessons[currentIndex].questions.length) {
     if (currentIndex < lessons.length - 1) goToLesson(currentIndex + 1);
-    else setMode("book");
+    else setMode("slide");
     return;
   }
   questionIndex++;
@@ -324,6 +433,19 @@ function initialize() {
   renderNavigation();
   const routeIndex = lessons.findIndex(lesson => `#${lesson.id}` === location.hash);
   goToLesson(routeIndex >= 0 ? routeIndex : 0);
+  $("slide-prev").addEventListener("click", previousSlide);
+  $("slide-next").addEventListener("click", nextSlide);
+  $("slide-play").addEventListener("click", () => {
+    const element = getSlideItems(lessons[currentIndex].id)[slideIndex];
+    const portion = element.audioParts ? [element.audioPart / element.audioParts, (element.audioPart + 1) / element.audioParts] : null;
+    playClip(element.segmentIndex, portion);
+  });
+  $("slide-fullscreen").addEventListener("click", () => {
+    if (document.fullscreenElement === $("slide-deck")) document.exitFullscreen?.();
+    else $("slide-deck").requestFullscreen?.();
+  });
+  $("show-book-from-slide").addEventListener("click", () => setMode("book"));
+  $("practice-from-slide").addEventListener("click", () => setMode("practice"));
   $("prev-button").addEventListener("click", () => goToLesson(currentIndex - 1));
   $("next-button").addEventListener("click", () => goToLesson(currentIndex + 1));
   $("mark-complete").addEventListener("click", markComplete);
@@ -333,7 +455,7 @@ function initialize() {
   $("audio-speed").addEventListener("change", (event) => { audio.playbackRate = Number(event.target.value); });
   for (const button of document.querySelectorAll(".mode")) button.addEventListener("click", () => setMode(button.dataset.mode));
   $("start-practice").addEventListener("click", () => setMode("practice"));
-  $("back-to-book").addEventListener("click", () => setMode("book"));
+  $("back-to-book").addEventListener("click", () => setMode("slide"));
   $("next-question").addEventListener("click", nextQuestion);
   $("retry-button").addEventListener("click", resetQuiz);
   $("reset-matching").addEventListener("click", renderMatching);
@@ -344,6 +466,11 @@ function initialize() {
   $("menu-button").addEventListener("click", () => { const open = $("sidebar").classList.toggle("open"); $("mobile-backdrop").hidden = !open; $("menu-button").setAttribute("aria-expanded", String(open)); });
   $("mobile-backdrop").addEventListener("click", closeMobileMenu);
   window.addEventListener("resize", resizePageImages);
+  document.addEventListener("keydown", (event) => {
+    if (mode !== "slide" || event.altKey || event.ctrlKey || event.metaKey || document.activeElement?.matches("input, textarea, select") || document.querySelector("dialog[open]")) return;
+    if (event.key === "ArrowLeft") { event.preventDefault(); nextSlide(); }
+    else if (event.key === "ArrowRight") { event.preventDefault(); previousSlide(); }
+  });
   window.addEventListener("hashchange", () => { const index = lessons.findIndex(lesson => `#${lesson.id}` === location.hash); if (index !== -1 && index !== currentIndex) goToLesson(index); });
 }
 
