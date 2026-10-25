@@ -44,8 +44,9 @@ let completed = new Set();
 try { completed = new Set(JSON.parse(localStorage.getItem(completedKey) || "[]")); } catch { /* Local storage may be unavailable. */ }
 
 let currentIndex = 0;
-let mode = "slide";
+let mode = "book";
 let slideIndex = 0;
+let focusedItemIndex = 0;
 let questionIndex = 0;
 let selected = null;
 let score = 0;
@@ -54,7 +55,11 @@ let matchingDone = new Set();
 let matchingSelection = null;
 const audio = $("page-audio");
 let activeClipIndex = null;
-let activeClipEnd = 0;
+let clipAudioContext = null;
+let activeClipSource = null;
+let clipRequest = 0;
+const decodedAudio = new Map();
+const decodingAudio = new Map();
 
 const letterNames = ["ا","ء","ب","ت","ث","ج","ح","خ","د","ذ","ر","ز","س","ش","ص","ض","ط","ظ","ع","غ","ف","ق","ك","ل","م","ن","ه","و","ي","ى"];
 const fathaLetters = ["أَ","بَ","تَ","ثَ","جَ","حَ","خَ","دَ","ذَ","رَ","زَ","سَ","شَ","صَ","ضَ","طَ","ظَ","عَ","غَ","فَ","قَ","كَ","لَ","مَ","نَ","هَ","وَ","يَ"];
@@ -99,60 +104,146 @@ function getSlideItems(pageId) {
 
 function resizePageImages() {
   const { width, height } = lessons[currentIndex];
-  const ratio = width / height;
-  $("page-interactive").style.width = `${Math.round(Math.min(590, innerHeight * .55) * ratio)}px`;
-  document.querySelector("#zoom-dialog .zoom-page").style.width = `${Math.round(Math.min(750, innerHeight * .94 - 62) * ratio)}px`;
+  const frameWidth = document.querySelector(".page-frame").clientWidth;
+  $("page-interactive").style.width = `${Math.min(width, Math.max(0, frameWidth - 30))}px`;
+  document.querySelector("#zoom-dialog .zoom-page").style.width = `${Math.round(Math.min(750, innerHeight * .94 - 62) * width / height)}px`;
 }
 
 function renderHotspots() {
   const lesson = lessons[currentIndex];
   const segments = window.PAGE_SEGMENTS[lesson.id];
-  const hotspots = getPageHotspots(lesson.id);
+  const hotspots = getSlideItems(lesson.id);
   for (const root of [$("page-hotspots"), $("zoom-hotspots")]) {
     root.replaceChildren();
-    for (const spot of hotspots) {
-      const available = !!segments[spot.index];
+    for (const [itemIndex, spot] of hotspots.entries()) {
+      const available = !!segments[spot.segmentIndex];
+      const isPhraseWord = Boolean(spot.audioParts);
+      const itemWidth = isPhraseWord ? spot.width / spot.audioParts : spot.width;
+      const itemX = isPhraseWord ? spot.x + spot.width / 2 - itemWidth * (spot.audioPart + .5) : spot.x;
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "audio-hotspot" + (available ? "" : " unavailable");
-      button.dataset.clipIndex = String(spot.index);
-      button.style.left = `${spot.x}%`;
+      button.className = "audio-hotspot";
+      button.dataset.clipIndex = String(spot.segmentIndex);
+      button.style.left = `${itemX}%`;
       button.style.top = `${spot.y}%`;
-      button.style.width = `${spot.width}%`;
+      button.style.width = `${itemWidth}%`;
       button.style.height = `${spot.height}%`;
-      button.disabled = !available;
-      button.setAttribute("aria-label", available ? `استمع إلى ${spot.label}` : `لا يتوفر مقطع صوتي مستقل لـ ${spot.label} حاليًا`);
-      button.title = available ? `استمع إلى ${spot.label}` : "هذا العنصر يحتاج مراجعة التسجيل";
-      if (available) button.addEventListener("click", () => playClip(spot.index));
+      const itemLabel = spot.word || spot.label;
+      const possessive = lesson.id === "letters" || lesson.id === "fatha" ? "نطقه" : "نطقها";
+      button.setAttribute("aria-label", `تكبير ${itemLabel}${available ? ` وسماع ${possessive} المنفرد` : ""}`);
+      button.title = `تكبير ${itemLabel}`;
+      button.addEventListener("click", () => openFocusedItem(itemIndex));
       root.append(button);
     }
   }
   $("segment-disclaimer").textContent = lesson.id === "letters"
-    ? "ملاحظة: رُصد ٢٩ مقطعًا صوتيًا مقابل ٣٠ عنصرًا. آخر عنصر معلّم للمراجعة. جميع المقاطع بحاجة إلى تدقيق سمعي قبل اعتمادها."
+    ? "تظهر صفحة الكتاب دون علامات، ويمكن تكبير كل حرف بالضغط عليه. تسجيل الحرف الأخير غير متوفر بصورة مستقلة؛ ويستخدم صوت الجهاز الآلي عند توفره."
     : "المقاطع الفردية محددة مبدئيًا وفق فواصل الصمت وترتيب الصفحة، وتحتاج تدقيقًا سمعيًا قبل اعتمادها.";
 }
 
 function clearClip() {
+  clipRequest++;
+  if (activeClipSource) {
+    activeClipSource.onended = null;
+    try { activeClipSource.stop(); } catch { /* The segment may already have ended. */ }
+    activeClipSource.disconnect();
+    activeClipSource = null;
+  }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   activeClipIndex = null;
-  activeClipEnd = 0;
   for (const button of document.querySelectorAll(".audio-hotspot.active")) button.classList.remove("active");
   $("slide-play").classList.remove("active");
+  $("item-dialog-play").classList.remove("active", "loading");
 }
 
-function playClip(index, portion = null) {
-  const segment = window.PAGE_SEGMENTS[lessons[currentIndex].id]?.[index];
-  if (!segment) return;
-  if (activeClipIndex === index && !audio.paused) { audio.pause(); return; }
+async function getDecodedAudio(lesson) {
+  if (decodedAudio.has(lesson.id)) return decodedAudio.get(lesson.id);
+  if (!decodingAudio.has(lesson.id)) {
+    const promise = fetch(lesson.audio)
+      .then((response) => {
+        if (!response.ok) throw new Error("تعذر جلب التسجيل");
+        return response.arrayBuffer();
+      })
+      .then((bytes) => clipAudioContext.decodeAudioData(bytes))
+      .then((buffer) => {
+        // Only keep two decoded pages to avoid holding the entire book in memory.
+        if (decodedAudio.size >= 2) decodedAudio.delete(decodedAudio.keys().next().value);
+        decodedAudio.set(lesson.id, buffer);
+        return buffer;
+      })
+      .finally(() => decodingAudio.delete(lesson.id));
+    decodingAudio.set(lesson.id, promise);
+  }
+  return decodingAudio.get(lesson.id);
+}
+
+function setClipStatus(message) {
+  if ($("item-dialog").open) $("item-dialog-status").textContent = message;
+}
+
+function pronounceMissingLetter() {
+  if (!("speechSynthesis" in window)) {
+    setClipStatus("هذا الحرف يحتاج إلى تسجيل صوتي مستقل.");
+    return;
+  }
+  clearClip();
+  const utterance = new SpeechSynthesisUtterance("أَلِفٌ مَقْصُورَةٌ");
+  utterance.lang = "ar-SA";
+  utterance.rate = .85;
+  utterance.onerror = () => setClipStatus("تعذر تشغيل الصوت الآلي. نحتاج إلى تسجيل أصلي لهذا الحرف.");
+  setClipStatus("يُنطق اسم الحرف بصوت الجهاز مؤقتًا إلى أن يُضاف التسجيل الأصلي.");
+  window.speechSynthesis.speak(utterance);
+}
+
+async function playClip(index, portion = null) {
+  const lesson = lessons[currentIndex];
+  const segment = window.PAGE_SEGMENTS[lesson.id]?.[index];
+  if (!segment) {
+    if (lesson.id === "letters" && index === letterNames.length - 1) pronounceMissingLetter();
+    else setClipStatus("هذا العنصر يحتاج إلى تسجيل صوتي مستقل.");
+    return;
+  }
   audio.pause();
   clearClip();
+  const request = clipRequest;
   activeClipIndex = index;
-  const duration = segment[1] - segment[0];
-  activeClipEnd = portion ? segment[0] + duration * portion[1] : segment[1];
-  audio.currentTime = portion ? segment[0] + duration * portion[0] : segment[0];
   for (const button of document.querySelectorAll(`[data-clip-index="${index}"]`)) button.classList.add("active");
   if (mode === "slide" && getSlideItems(lessons[currentIndex].id)[slideIndex]?.segmentIndex === index) $("slide-play").classList.add("active");
-  const playing = audio.play();
-  if (playing?.catch) playing.catch(() => clearClip());
+  $("item-dialog-play").classList.add("loading");
+  setClipStatus("جارٍ تجهيز نطق هذا العنصر فقط…");
+  try {
+    const AudioContextType = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextType) throw new Error("AudioContext unavailable");
+    if (!clipAudioContext) clipAudioContext = new AudioContextType();
+    // Resume under the user's click gesture, before any network wait.
+    const resuming = clipAudioContext.resume();
+    const [buffer] = await Promise.all([getDecodedAudio(lesson), resuming]);
+    if (request !== clipRequest) return;
+    const source = clipAudioContext.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = Number($("audio-speed").value);
+    source.connect(clipAudioContext.destination);
+    const total = segment[1] - segment[0];
+    const start = portion ? segment[0] + total * portion[0] : segment[0];
+    const end = portion ? segment[0] + total * portion[1] : segment[1];
+    const duration = Math.max(.08, Math.min(end, buffer.duration) - start);
+    activeClipSource = source;
+    $("item-dialog-play").classList.remove("loading");
+    $("item-dialog-play").classList.add("active");
+    setClipStatus("يُشغَّل الآن صوت هذا العنصر فقط، دون بقية تسجيل الصفحة.");
+    source.onended = () => {
+      if (request !== clipRequest) return;
+      clearClip();
+      setClipStatus("يمكنك الضغط على زر الصوت لإعادة النطق.");
+    };
+    // Web Audio stops the recording at this duration even on mobile browsers.
+    source.start(0, start, duration);
+  } catch (error) {
+    if (request !== clipRequest) return;
+    clearClip();
+    setClipStatus("تعذر تشغيل هذا المقطع وحده. جرّب الضغط مرة أخرى.");
+    console.error("Individual pronunciation error", error);
+  }
 }
 
 function persistProgress() {
@@ -227,9 +318,56 @@ function renderSlide() {
     ? currentIndex === lessons.length - 1 ? "التدريبات" : "الدرس التالي"
     : "التالي";
   const hasAudio = Boolean(window.PAGE_SEGMENTS?.[lesson.id]?.[element.segmentIndex]);
-  $("slide-play").disabled = !hasAudio;
-  $("slide-play").setAttribute("aria-label", hasAudio ? "استمع إلى العنصر الحالي" : "لا يتوفر صوت منفصل لهذا العنصر حاليًا");
+  const speechFallback = lesson.id === "letters" && element.segmentIndex === letterNames.length - 1 && "speechSynthesis" in window;
+  $("slide-play").disabled = !hasAudio && !speechFallback;
+  $("slide-play").setAttribute("aria-label", hasAudio ? "استمع إلى العنصر الحالي" : speechFallback ? "استمع إلى اسم الحرف بصوت الجهاز" : "لا يتوفر صوت منفصل لهذا العنصر حاليًا");
   $("slide-sound-label").textContent = !hasAudio ? "الصوت قيد المراجعة" : lesson.id === "letters" || lesson.id === "fatha" ? "استمع إلى الحرف" : "استمع إلى الكلمة";
+}
+
+function renderFocusedItem() {
+  slideIndex = focusedItemIndex;
+  renderSlide();
+  const lesson = lessons[currentIndex];
+  const elements = getSlideItems(lesson.id);
+  const element = elements[focusedItemIndex];
+  const visual = $("item-dialog-visual");
+  visual.replaceChildren($("slide-item").firstElementChild.cloneNode(true));
+  visual.setAttribute("aria-label", $("slide-item").getAttribute("aria-label"));
+  const unit = lesson.id === "letters" || lesson.id === "fatha" ? "الحرف" : "الكلمة";
+  $("item-dialog-title").textContent = lesson.title;
+  $("item-dialog-counter").textContent = `${unit} ${arabicDigits(focusedItemIndex + 1)} من ${arabicDigits(elements.length)}`;
+  $("item-dialog-prev").disabled = focusedItemIndex === 0;
+  $("item-dialog-next").disabled = focusedItemIndex === elements.length - 1;
+  const hasAudio = Boolean(window.PAGE_SEGMENTS?.[lesson.id]?.[element.segmentIndex]);
+  const speechFallback = lesson.id === "letters" && element.segmentIndex === letterNames.length - 1 && "speechSynthesis" in window;
+  $("item-dialog-play").disabled = !hasAudio && !speechFallback;
+  $("item-dialog-play").querySelector("span").textContent = hasAudio ? unit === "الحرف" ? "استمع إلى الحرف وحده" : "استمع إلى الكلمة وحدها" : speechFallback ? "نطق اسم الحرف آليًا" : "الصوت غير متوفر";
+  $("item-dialog-status").textContent = "";
+}
+
+function playFocusedItem() {
+  const element = getSlideItems(lessons[currentIndex].id)[focusedItemIndex];
+  const portion = element.audioParts ? [element.audioPart / element.audioParts, (element.audioPart + 1) / element.audioParts] : null;
+  playClip(element.segmentIndex, portion);
+}
+
+function openFocusedItem(index) {
+  audio.pause();
+  clearClip();
+  if ($("zoom-dialog").open) $("zoom-dialog").close();
+  focusedItemIndex = index;
+  renderFocusedItem();
+  if (!$("item-dialog").open) $("item-dialog").showModal();
+  playFocusedItem();
+}
+
+function moveFocusedItem(change) {
+  const next = focusedItemIndex + change;
+  if (next < 0 || next >= getSlideItems(lessons[currentIndex].id).length) return;
+  clearClip();
+  focusedItemIndex = next;
+  renderFocusedItem();
+  playFocusedItem();
 }
 
 function nextSlide() {
@@ -259,6 +397,8 @@ function goToLesson(index) {
   clearClip();
   currentIndex = index;
   slideIndex = 0;
+  focusedItemIndex = 0;
+  if ($("item-dialog").open) $("item-dialog").close();
   const lesson = lessons[index];
   $("lesson-chapter").textContent = lesson.chapter;
   $("lesson-title").textContent = lesson.title;
@@ -283,7 +423,7 @@ function goToLesson(index) {
   renderQuestion();
   renderMatching();
   renderCompleteButton();
-  setMode("slide");
+  setMode(mode);
   if (location.hash !== `#${lesson.id}`) history.replaceState(null, "", `#${lesson.id}`);
 }
 
@@ -300,8 +440,14 @@ function markComplete() {
 }
 
 function setMode(nextMode) {
+  if (mode !== nextMode) {
+    audio.pause();
+    clearClip();
+    if ($("item-dialog").open) $("item-dialog").close();
+  }
   mode = nextMode;
   document.body.classList.toggle("slide-mode", mode === "slide");
+  document.body.classList.toggle("book-mode", mode === "book");
   for (const next of ["slide", "book", "practice"]) {
     const active = next === mode;
     $("tab-" + next).classList.toggle("active", active);
@@ -324,7 +470,7 @@ function renderQuestion() {
   if (finished) {
     $("question-title").textContent = `أتممت التدريب! نتيجتك ${arabicDigits(score)} من ${arabicDigits(questions.length)}`;
     $("question-hint").textContent = "يمكنك إعادة التدريب أو الانتقال إلى الصفحة التالية.";
-    $("next-question").textContent = currentIndex < lessons.length - 1 ? "الدرس التالي ←" : "العودة إلى الشرائح";
+    $("next-question").textContent = currentIndex < lessons.length - 1 ? "الدرس التالي ←" : "العودة إلى صفحة الكتاب";
     $("next-question").hidden = false;
     if (score === questions.length) markComplete();
     return;
@@ -370,8 +516,8 @@ function chooseAnswer(answer, clickedButton) {
 
 function nextQuestion() {
   if (questionIndex >= lessons[currentIndex].questions.length) {
-    if (currentIndex < lessons.length - 1) goToLesson(currentIndex + 1);
-    else setMode("slide");
+    if (currentIndex < lessons.length - 1) { setMode("book"); goToLesson(currentIndex + 1); }
+    else setMode("book");
     return;
   }
   questionIndex++;
@@ -440,6 +586,12 @@ function initialize() {
     const portion = element.audioParts ? [element.audioPart / element.audioParts, (element.audioPart + 1) / element.audioParts] : null;
     playClip(element.segmentIndex, portion);
   });
+  $("item-dialog-prev").addEventListener("click", () => moveFocusedItem(-1));
+  $("item-dialog-next").addEventListener("click", () => moveFocusedItem(1));
+  $("item-dialog-play").addEventListener("click", playFocusedItem);
+  $("item-dialog-close").addEventListener("click", () => $("item-dialog").close());
+  $("item-dialog").addEventListener("close", clearClip);
+  $("item-dialog").addEventListener("click", (event) => { if (event.target === $("item-dialog")) $("item-dialog").close(); });
   $("slide-fullscreen").addEventListener("click", () => {
     if (document.fullscreenElement === $("slide-deck")) document.exitFullscreen?.();
     else $("slide-deck").requestFullscreen?.();
@@ -449,13 +601,10 @@ function initialize() {
   $("prev-button").addEventListener("click", () => goToLesson(currentIndex - 1));
   $("next-button").addEventListener("click", () => goToLesson(currentIndex + 1));
   $("mark-complete").addEventListener("click", markComplete);
-  audio.addEventListener("ended", markComplete);
-  audio.addEventListener("pause", () => { if (audio.paused) clearClip(); });
-  audio.addEventListener("timeupdate", () => { if (activeClipIndex !== null && audio.currentTime >= activeClipEnd) audio.pause(); });
   $("audio-speed").addEventListener("change", (event) => { audio.playbackRate = Number(event.target.value); });
   for (const button of document.querySelectorAll(".mode")) button.addEventListener("click", () => setMode(button.dataset.mode));
   $("start-practice").addEventListener("click", () => setMode("practice"));
-  $("back-to-book").addEventListener("click", () => setMode("slide"));
+  $("back-to-book").addEventListener("click", () => setMode("book"));
   $("next-question").addEventListener("click", nextQuestion);
   $("retry-button").addEventListener("click", resetQuiz);
   $("reset-matching").addEventListener("click", renderMatching);
@@ -467,7 +616,13 @@ function initialize() {
   $("mobile-backdrop").addEventListener("click", closeMobileMenu);
   window.addEventListener("resize", resizePageImages);
   document.addEventListener("keydown", (event) => {
-    if (mode !== "slide" || event.altKey || event.ctrlKey || event.metaKey || document.activeElement?.matches("input, textarea, select") || document.querySelector("dialog[open]")) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || document.activeElement?.matches("input, textarea, select")) return;
+    if ($("item-dialog").open) {
+      if (event.key === "ArrowLeft") { event.preventDefault(); moveFocusedItem(1); }
+      else if (event.key === "ArrowRight") { event.preventDefault(); moveFocusedItem(-1); }
+      return;
+    }
+    if (mode !== "slide" || document.querySelector("dialog[open]")) return;
     if (event.key === "ArrowLeft") { event.preventDefault(); nextSlide(); }
     else if (event.key === "ArrowRight") { event.preventDefault(); previousSlide(); }
   });
